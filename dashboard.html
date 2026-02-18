@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>BRX Key Manager</title>
+    <style>
+        body { font-family: sans-serif; background: #111; color: #fff; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; }
+        input, button { padding: 10px; margin: 5px; border-radius: 4px; border: 1px solid #444; background: #222; color: #fff; }
+        button { cursor: pointer; background: #e63946; border: none; }
+        button:hover { background: #ff4d5a; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #333; padding: 10px; text-align: left; font-size: 14px; }
+        th { background: #222; }
+        .status-active { color: #4ade80; }
+        .status-suspended { color: #f87171; }
+        .btn-small { padding: 5px 10px; font-size: 12px; margin: 0 2px; }
+        .btn-reset { background: #f59e0b; }
+        .btn-del { background: #ef4444; }
+        .config-box { background: #1a1a1a; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>BRX License Manager</h1>
+        
+        <div class="config-box">
+            <input type="text" id="apiUrl" placeholder="https://your-app.vercel.app/api" style="width: 300px;">
+            <input type="password" id="adminSecret" placeholder="Admin Secret" value="BRX-ADMIN-SECRET-2024">
+            <button onclick="fetchKeys()">Refresh Data</button>
+        </div>
+
+        <div class="config-box">
+            <h3>Generate New Key</h3>
+            <input type="text" id="newKeyNote" placeholder="Note (e.g. Customer Name)">
+            <input type="text" id="customKeyInput" placeholder="Custom Key (Optional)">
+            <button onclick="createKey()">Create Key</button>
+        </div>
+
+        <table id="keyTable">
+            <thead>
+                <tr>
+                    <th>Key</th>
+                    <th>Status</th>
+                    <th>HWID</th>
+                    <th>Note</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Data will be here -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        async function callApi(action, data = {}) {
+            const url = document.getElementById('apiUrl').value;
+            const secret = document.getElementById('adminSecret').value;
+            
+            if(!url) return alert("Please enter API URL");
+
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, adminSecret: secret, ...data })
+                });
+                return await res.json();
+            } catch (e) {
+                alert("Error: " + e.message);
+                return null;
+            }
+        }
+
+        async function fetchKeys() {
+            const data = await callApi('list_keys');
+            if(!data) return;
+            
+            const tbody = document.querySelector('#keyTable tbody');
+            tbody.innerHTML = '';
+
+            Object.values(data).forEach(k => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td style="font-family: monospace;">${k.key}</td>
+                    <td class="${k.status === 'active' ? 'status-active' : 'status-suspended'}">${k.status.toUpperCase()}</td>
+                    <td style="font-size: 11px; color: #888;">${k.hwid || 'Not Linked'}</td>
+                    <td>${k.note}</td>
+                    <td>
+                        <button class="btn-small" onclick="toggleStatus('${k.key}')">${k.status === 'active' ? 'Suspend' : 'Activate'}</button>
+                        <button class="btn-small btn-reset" onclick="resetHwid('${k.key}')">Reset HWID</button>
+                        <button class="btn-small btn-del" onclick="deleteKey('${k.key}')">Del</button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        async function createKey() {
+            const note = document.getElementById('newKeyNote').value;
+            const customKey = document.getElementById('customKeyInput').value;
+            await callApi('create_key', { note, customKey });
+            fetchKeys();
+        }
+
+        async function toggleStatus(key) {
+            if(confirm('Change status?')) {
+                await callApi('toggle_status', { targetKey: key });
+                fetchKeys();
+            }
+        }
+
+        async function resetHwid(key) {
+            if(confirm('Reset HWID for this key?')) {
+                await callApi('reset_hwid', { targetKey: key });
+                fetchKeys();
+            }
+        }
+
+        async function deleteKey(key) {
+            if(confirm('DELETE this key permanently?')) {
+                await callApi('delete_key', { targetKey: key });
+                fetchKeys();
+            }
+        }
+    </script>
+</body>
+</html>
